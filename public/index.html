@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Habit Ledger</title>
+<style>
+  :root{
+    color-scheme: light;
+    --paper:#F6F3EC;
+    --ink:#211E1A;
+    --ink-soft:#5B564C;
+    --line:#D9D3C4;
+    --line-strong:#B8AF9A;
+    --olive:#5B6B4F;
+    --olive-light:#E4E9DD;
+    --rust:#B5533C;
+    --rust-light:#F4E1DA;
+    --morning:#C08A2E;
+    --morning-light:#F3E6C9;
+    --night:#3B4C6B;
+    --night-light:#DCE2EA;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Courier New', ui-monospace, monospace;
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;margin-bottom:20px;
+  }
+  .header-top{display:flex;justify-content:space-between;align-items:flex-end;}
+  h1{
+    font-family:Georgia, 'Times New Roman', serif;
+    font-size:28px;font-weight:700;margin:0;letter-spacing:0.5px;
+  }
+  .sub{color:var(--ink-soft);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-top:4px;}
+  .month-nav{display:flex;align-items:center;gap:10px;justify-content:flex-end;}
+  .month-label{font-size:14px;color:var(--ink-soft);}
+  .streak-note{font-size:11px;color:var(--olive);margin-top:2px;text-align:right;}
+  .nav-btn{width:26px;height:26px;border:1px solid var(--ink);background:var(--paper);color:var(--ink);cursor:pointer;font-family:inherit;font-size:12px;}
+
+  .card{background:#FFFEFB;border:1px solid var(--line-strong);}
+
+  .grid-scroll{overflow-x:auto;}
+  table{border-collapse:separate;border-spacing:0;font-size:11px;border-left:1px solid var(--line);border-top:1px solid var(--line);}
+  th,td{border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;padding:0;}
+  th{background:var(--paper);color:var(--ink-soft);font-weight:700;font-size:10px;padding:6px 2px;position:sticky;top:0;}
+  th.habit-col, td.habit-col{
+    position:sticky;left:0;background:#FFFEFB;text-align:left;padding:6px 8px;
+    width:185px;font-size:12px;border-right:none;
+    box-shadow: 2px 0 0 0 var(--ink);
+    transform:translateZ(0);
+    -webkit-transform:translateZ(0);
+    backface-visibility:hidden;
+  }
+  th.habit-col{background:var(--paper);z-index:3;white-space:nowrap;}
+  td.habit-col{z-index:2;cursor:grab;vertical-align:middle;}
+  .habit-row-inner{display:flex;align-items:center;gap:5px;width:100%;height:100%;}
+  td.habit-col:active{cursor:grabbing;}
+  .habit-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;font-weight:700;}
+  tr.drag-over td.habit-col{border-top:2px solid var(--olive);}
+  td.habit-col{border-left:4px solid transparent;}
+  td.habit-col.session-morning{border-left:4px solid var(--morning);}
+  td.habit-col.session-night{border-left:4px solid var(--night);}
+  .session-icon{
+    cursor:pointer;flex-shrink:0;width:12px;height:12px;border-radius:50%;
+    border:1.5px solid var(--line-strong);background:transparent;padding:0;
+  }
+  .session-icon.morning{background:var(--morning);border-color:var(--morning);}
+  .session-icon.night{background:var(--night);border-color:var(--night);}
+  .session-icon.anytime{background:transparent;border-color:var(--line-strong);}
+  .session-select{
+    width:auto;font-family:inherit;font-size:12px;padding:8px 6px;
+    border:1px solid var(--line-strong);background:var(--paper)!important;color:var(--ink)!important;
+    flex-shrink:0;
+  }
+  .del-habit{background:none;border:none;color:var(--line-strong);cursor:pointer;font-size:13px;line-height:1;padding:2px;flex-shrink:0;align-self:center;margin-left:auto;}
+  .del-habit:hover{color:var(--rust);}
+  td.day-cell{width:40px;padding:3px 2px;vertical-align:top;}
+  td.day-cell.today{background:var(--rust-light);}
+  th.today{background:var(--rust-light);color:var(--rust);}
+  .day-tick{width:15px;height:15px;accent-color:var(--olive);cursor:pointer;display:block;margin:0 auto 3px;}
+  .day-note{
+    width:36px;border:none;background:transparent!important;color:var(--ink-soft)!important;
+    text-align:center;font-family:inherit;font-size:9px;padding:0;display:block;
+    caret-color:var(--ink);
+  }
+  .day-note:focus{outline:1px solid var(--olive);outline-offset:-1px;}
+  td.day-cell.checked{background:var(--olive-light);}
+  td.day-cell.checked .day-note{color:var(--olive)!important;}
+  td.day-cell.today.checked{background:var(--olive-light);}
+
+  .section-divider-label{
+    position:sticky;left:0;z-index:2;
+    background:var(--paper);color:var(--ink-soft);text-align:left;
+    font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    padding:6px 10px;border-top:2px solid var(--ink);border-bottom:1px solid var(--line-strong);
+    box-shadow: 2px 0 0 0 var(--ink);
+    transform:translateZ(0);
+    white-space:nowrap;
+  }
+  .section-divider-spacer{
+    background:var(--paper);
+    border-top:2px solid var(--ink);border-bottom:1px solid var(--line-strong);
+  }
+  .log-note{
+    width:36px;height:26px;border:none;background:transparent!important;color:var(--ink)!important;
+    text-align:center;font-family:inherit;font-size:9px;padding:0;
+    caret-color:var(--ink);
+  }
+  .log-note:focus{outline:1px solid var(--olive);outline-offset:-1px;}
+  td.log-cell.has-value{background:var(--rust-light);}
+  td.log-cell.has-value .log-note{color:var(--rust)!important;font-weight:700;}
+  td.log-cell.today{background:var(--rust-light);}
+  td.log-cell.today.has-value{background:var(--rust-light);}
+
+  .add-habit-row{display:flex;gap:8px;padding:12px;border-top:2px solid var(--ink);}
+  input, select, textarea{color-scheme: light;}
+  .add-habit-row input{
+    flex:1;font-family:inherit;font-size:12px;padding:8px 10px;font-weight:700;
+    border:1px solid var(--line-strong);background:var(--paper)!important;color:var(--ink)!important;
+    caret-color:var(--ink);
+  }
+  .add-habit-row button{
+    width:34px;height:34px;flex-shrink:0;border:1px solid var(--ink);background:var(--ink);
+    color:var(--paper);font-size:16px;cursor:pointer;font-family:inherit;
+  }
+  .add-habit-row button:hover{background:var(--olive);border-color:var(--olive);}
+  .empty-note{padding:16px;font-size:12px;color:var(--ink-soft);}
+
+  .todo-section{margin-top:20px;}
+  .todo-toggle{
+    width:100%;display:flex;justify-content:space-between;align-items:center;
+    padding:14px 16px;background:var(--ink);color:var(--paper);
+    border:none;cursor:pointer;font-family:inherit;font-size:13px;
+    letter-spacing:1px;text-transform:uppercase;
+  }
+  .todo-toggle .count{font-size:11px;color:var(--paper);opacity:0.7;}
+  .todo-toggle .chev{transition:transform 0.2s;}
+  .todo-toggle.open .chev{transform:rotate(180deg);}
+  .todo-body{max-height:0;overflow:hidden;transition:max-height 0.25s ease;}
+  .todo-body.open{max-height:600px;}
+  .todo-add{display:flex;gap:8px;padding:12px;border-bottom:1px solid var(--line);}
+  .todo-add input{
+    flex:1;font-family:inherit;font-size:12px;padding:8px 10px;
+    border:1px solid var(--line-strong);background:var(--paper)!important;color:var(--ink)!important;
+    caret-color:var(--ink);
+  }
+  .todo-add button{
+    width:34px;flex-shrink:0;border:1px solid var(--ink);background:var(--ink);
+    color:var(--paper);font-size:16px;cursor:pointer;font-family:inherit;
+  }
+  .todo-list{list-style:none;margin:0;padding:6px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;}
+  .todo-item{
+    display:flex;align-items:center;gap:10px;padding:9px 10px;
+    border:1px solid var(--line);font-size:12.5px;
+    transition:opacity 0.35s ease, transform 0.35s ease;
+  }
+  .todo-item.leaving{opacity:0;transform:translateX(12px);}
+  .todo-item input[type=checkbox]{width:16px;height:16px;accent-color:var(--olive);cursor:pointer;flex-shrink:0;}
+  .todo-item span{word-break:break-word;}
+  .todo-empty{padding:20px 16px;font-size:12px;color:var(--ink-soft);text-align:center;grid-column:1/-1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="header-top">
+      <div>
+        <h1>Habit ledger</h1>
+        <div class="sub">Daily compounding log</div>
+      </div>
+      <div>
+        <div class="month-nav">
+          <button class="nav-btn" id="prevMonthBtn" title="Previous month">&#8592;</button>
+          <div class="month-label" id="monthLabel"></div>
+          <button class="nav-btn" id="nextMonthBtn" title="Next month">&#8594;</button>
+        </div>
+        <div class="streak-note" id="todayNote"></div>
+        <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;align-items:center;">
+          <span id="cloudStatus" style="font-size:9px;color:var(--ink-soft);"></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="grid-scroll">
+        <table id="habitTable"></table>
+      </div>
+      <div class="add-habit-row">
+        <input id="newHabitInput" type="text" placeholder="Add a habit">
+        <button id="addHabitBtn" title="Add habit">+</button>
+      </div>
+      <div class="add-habit-row" style="border-top:1px solid var(--line);">
+        <input id="newLogInput" type="text" placeholder="Add a daily log, e.g. wake-up time">
+        <button id="addLogBtn" title="Add log">+</button>
+      </div>
+    </div>
+
+    <div class="todo-section card">
+      <button class="todo-toggle" id="todoToggle">
+        <span>To-do <span class="count" id="todoCount"></span></span>
+        <span class="chev">&#9660;</span>
+      </button>
+      <div class="todo-body" id="todoBody">
+        <div class="todo-add">
+          <input id="newTodoInput" type="text" placeholder="Add a task">
+          <button id="addTodoBtn" title="Add task">+</button>
+        </div>
+        <ul class="todo-list" id="todoList"></ul>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCmquf-sAWb0NhKWdBH3DU2m6LIdl6If7U",
+  authDomain: "habit-tracker-62109.firebaseapp.com",
+  projectId: "habit-tracker-62109",
+  storageBucket: "habit-tracker-62109.firebasestorage.app",
+  messagingSenderId: "55707611483",
+  appId: "1:55707611483:web:b2e03fd2e88a604cb66a7e"
+};
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+const stateDocRef = doc(db, "habitLedger", "data");
+let cloudReady = false;
+let suppressNextWrite = false;
+
+function setCloudStatus(text, color){
+  const el = document.getElementById('cloudStatus');
+  if(el){ el.textContent = text; el.style.color = color; }
+}
+
+const STORAGE_KEY = 'habit-ledger-data';
+let state = { habits: [], ticks: {}, todos: [], logs: [], logNotes: {} };
+let dragInfo = null;
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayISO(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+
+async function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      state = Object.assign({habits:[],ticks:{},todos:[],logs:[],logNotes:{}}, parsed);
+    }
+  }catch(e){ /* no existing data */ }
+  normalizeTicks();
+}
+
+function normalizeTicks(){
+  Object.keys(state.ticks).forEach(key=>{
+    const v = state.ticks[key];
+    if(v && typeof v === 'object' && ('checked' in v || 'note' in v)) return;
+    if(v === true){
+      state.ticks[key] = { checked: true, note: '' };
+    } else if(typeof v === 'string'){
+      state.ticks[key] = { checked: !!v.trim(), note: v.trim() };
+    } else {
+      delete state.ticks[key];
+    }
+  });
+}
+
+async function saveState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){ console.error('save failed', e); }
+  pushToCloud();
+}
+
+async function pushToCloud(){
+  try{
+    suppressNextWrite = true;
+    await setDoc(stateDocRef, state);
+    setCloudStatus('\u2601 Synced', 'var(--olive)');
+  }catch(e){
+    console.error('cloud save failed', e);
+    setCloudStatus('\u2601 Sync failed', 'var(--rust)');
+  }
+}
+
+const now = new Date();
+const realYear = now.getFullYear();
+const realMonth = now.getMonth();
+let year = realYear;
+let month = realMonth;
+let daysInMonth = new Date(year, month+1, 0).getDate();
+
+function updateHeader(){
+  daysInMonth = new Date(year, month+1, 0).getDate();
+  const monthName = new Date(year, month, 1).toLocaleString('en-US', {month:'long'});
+  document.getElementById('monthLabel').textContent = monthName + ' ' + year;
+  if(year === realYear && month === realMonth){
+    document.getElementById('todayNote').textContent = 'Today \u00b7 ' + now.toLocaleDateString('en-US',{weekday:'long', day:'numeric'});
+  } else {
+    document.getElementById('todayNote').textContent = '';
+  }
+}
+updateHeader();
+
+document.getElementById('prevMonthBtn').onclick = ()=>{
+  month -= 1;
+  if(month < 0){ month = 11; year -= 1; }
+  updateHeader();
+  renderTable();
+};
+document.getElementById('nextMonthBtn').onclick = ()=>{
+  month += 1;
+  if(month > 11){ month = 0; year += 1; }
+  updateHeader();
+  renderTable();
+};
+
+function dayCellKey(habitId, day){
+  const m = String(month+1).padStart(2,'0');
+  const d = String(day).padStart(2,'0');
+  return habitId + ':' + year + '-' + m + '-' + d;
+}
+
+function renderTable(){
+  const table = document.getElementById('habitTable');
+  table.innerHTML = '';
+
+  if(state.habits.length === 0 && state.logs.length === 0){
+    return;
+  }
+
+  const viewingCurrentMonth = (year === realYear && month === realMonth);
+
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+  const thHabit = document.createElement('th');
+  thHabit.className = 'habit-col';
+  thHabit.textContent = 'Habit';
+  trHead.appendChild(thHabit);
+  for(let d=1; d<=daysInMonth; d++){
+    const th = document.createElement('th');
+    th.style.width = '40px';
+    const isToday = viewingCurrentMonth && d === now.getDate();
+    if(isToday) th.className = 'today';
+    th.textContent = d;
+    trHead.appendChild(th);
+  }
+  thead.appendChild(trHead);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  state.habits.forEach(habit=>{
+    const tr = document.createElement('tr');
+    tr.dataset.habitId = habit.id;
+    const tdName = document.createElement('td');
+    tdName.className = 'habit-col';
+    if(habit.session === 'morning') tdName.classList.add('session-morning');
+    if(habit.session === 'night') tdName.classList.add('session-night');
+    const innerWrap = document.createElement('div');
+    innerWrap.className = 'habit-row-inner';
+
+    const sessionIcon = document.createElement('span');
+    function paintSessionIcon(){
+      sessionIcon.className = 'session-icon';
+      sessionIcon.textContent = '';
+      tdName.classList.remove('session-morning','session-night');
+      if(habit.session === 'morning'){
+        sessionIcon.classList.add('morning');
+        tdName.classList.add('session-morning');
+        sessionIcon.title = 'Morning \u2014 tap to change';
+      } else if(habit.session === 'night'){
+        sessionIcon.classList.add('night');
+        tdName.classList.add('session-night');
+        sessionIcon.title = 'Night \u2014 tap to change';
+      } else {
+        sessionIcon.classList.add('anytime');
+        sessionIcon.title = 'Anytime \u2014 tap to set morning or night';
+      }
+    }
+    paintSessionIcon();
+    sessionIcon.onclick = ()=>{
+      habit.session = habit.session === 'morning' ? 'night' : (habit.session === 'night' ? '' : 'morning');
+      paintSessionIcon();
+      saveState();
+    };
+
+    tdName.draggable = true;
+    tdName.title = 'Drag to reorder';
+    tdName.addEventListener('dragstart', e=>{
+      dragInfo = { type: 'habit', id: habit.id };
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', habit.id);
+      tr.classList.add('dragging-row');
+    });
+    tdName.addEventListener('dragend', ()=>{
+      tr.classList.remove('dragging-row');
+      document.querySelectorAll('tr.drag-over').forEach(el=>el.classList.remove('drag-over'));
+    });
+
+    tr.addEventListener('dragover', e=>{
+      if(!dragInfo || dragInfo.type !== 'habit') return;
+      e.preventDefault();
+      tr.classList.add('drag-over');
+    });
+    tr.addEventListener('dragleave', ()=>{ tr.classList.remove('drag-over'); });
+    tr.addEventListener('drop', e=>{
+      if(!dragInfo || dragInfo.type !== 'habit') return;
+      e.preventDefault();
+      tr.classList.remove('drag-over');
+      const fromId = dragInfo.id;
+      const toId = habit.id;
+      if(fromId === toId) return;
+      const fromIdx = state.habits.findIndex(h=>h.id===fromId);
+      const toIdx = state.habits.findIndex(h=>h.id===toId);
+      if(fromIdx === -1 || toIdx === -1) return;
+      const [moved] = state.habits.splice(fromIdx, 1);
+      state.habits.splice(toIdx, 0, moved);
+      dragInfo = null;
+      saveState();
+      renderTable();
+    });
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'habit-name';
+    nameSpan.textContent = habit.name;
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del-habit';
+    delBtn.textContent = '\u2715';
+    delBtn.title = 'Remove habit';
+    delBtn.onclick = ()=>{
+      state.habits = state.habits.filter(h=>h.id!==habit.id);
+      Object.keys(state.ticks).forEach(k=>{ if(k.startsWith(habit.id+':')) delete state.ticks[k]; });
+      saveState();
+      renderTable();
+    };
+    nameSpan.style.cursor = 'text';
+    nameSpan.title = 'Tap to rename';
+    nameSpan.onclick = ()=>{
+      const editInput = document.createElement('input');
+      editInput.type = 'text';
+      editInput.value = habit.name;
+      editInput.maxLength = 40;
+      editInput.style.cssText = 'flex:1;font-family:inherit;font-size:12px;font-weight:700;padding:3px 5px;border:1px solid var(--olive);background:var(--paper);color:var(--ink);min-width:0;';
+      function commit(){
+        const val = editInput.value.trim();
+        if(val) habit.name = val;
+        saveState();
+        renderTable();
+      }
+      editInput.addEventListener('blur', commit);
+      editInput.addEventListener('keydown', e=>{
+        if(e.key === 'Enter') editInput.blur();
+        if(e.key === 'Escape'){ editInput.value = habit.name; editInput.blur(); }
+      });
+      innerWrap.replaceChild(editInput, nameSpan);
+      editInput.focus();
+      editInput.select();
+    };
+
+    innerWrap.appendChild(sessionIcon);
+    innerWrap.appendChild(nameSpan);
+    innerWrap.appendChild(delBtn);
+    tdName.appendChild(innerWrap);
+    tr.appendChild(tdName);
+
+    for(let d=1; d<=daysInMonth; d++){
+      const td = document.createElement('td');
+      td.className = 'day-cell';
+      const isToday = viewingCurrentMonth && d === now.getDate();
+      if(isToday) td.classList.add('today');
+      const key = dayCellKey(habit.id, d);
+      const entry = state.ticks[key] || { checked:false, note:'' };
+      if(entry.checked) td.classList.add('checked');
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'day-tick';
+      cb.checked = !!entry.checked;
+
+      const note = document.createElement('input');
+      note.type = 'text';
+      note.className = 'day-note';
+      note.maxLength = 6;
+      note.value = entry.note || '';
+
+      function persist(){
+        const checked = cb.checked;
+        const noteVal = note.value.trim();
+        td.classList.toggle('checked', checked);
+        if(checked || noteVal){
+          state.ticks[key] = { checked: checked, note: noteVal };
+        } else {
+          delete state.ticks[key];
+        }
+        saveState();
+      }
+
+      cb.addEventListener('change', persist);
+      note.addEventListener('blur', persist);
+      note.addEventListener('keydown', e=>{ if(e.key === 'Enter') note.blur(); });
+
+      td.appendChild(cb);
+      td.appendChild(note);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  });
+
+  if(state.logs.length > 0){
+    const divTr = document.createElement('tr');
+    divTr.className = 'section-divider';
+    const labelTd = document.createElement('td');
+    labelTd.className = 'section-divider-label';
+    labelTd.textContent = 'Daily log';
+    divTr.appendChild(labelTd);
+    const spacerTd = document.createElement('td');
+    spacerTd.colSpan = daysInMonth;
+    spacerTd.className = 'section-divider-spacer';
+    divTr.appendChild(spacerTd);
+    tbody.appendChild(divTr);
+
+    state.logs.forEach(log=>{
+      const tr = document.createElement('tr');
+      tr.dataset.logId = log.id;
+      const tdName = document.createElement('td');
+      tdName.className = 'habit-col';
+      const innerWrap = document.createElement('div');
+      innerWrap.className = 'habit-row-inner';
+
+      tdName.draggable = true;
+      tdName.title = 'Drag to reorder';
+      tdName.addEventListener('dragstart', e=>{
+        dragInfo = { type: 'log', id: log.id };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', log.id);
+        tr.classList.add('dragging-row');
+      });
+      tdName.addEventListener('dragend', ()=>{
+        tr.classList.remove('dragging-row');
+        document.querySelectorAll('tr.drag-over').forEach(el=>el.classList.remove('drag-over'));
+      });
+
+      tr.addEventListener('dragover', e=>{
+        if(!dragInfo || dragInfo.type !== 'log') return;
+        e.preventDefault();
+        tr.classList.add('drag-over');
+      });
+      tr.addEventListener('dragleave', ()=>{ tr.classList.remove('drag-over'); });
+      tr.addEventListener('drop', e=>{
+        if(!dragInfo || dragInfo.type !== 'log') return;
+        e.preventDefault();
+        tr.classList.remove('drag-over');
+        const fromId = dragInfo.id;
+        const toId = log.id;
+        if(fromId === toId) return;
+        const fromIdx = state.logs.findIndex(l=>l.id===fromId);
+        const toIdx = state.logs.findIndex(l=>l.id===toId);
+        if(fromIdx === -1 || toIdx === -1) return;
+        const [moved] = state.logs.splice(fromIdx, 1);
+        state.logs.splice(toIdx, 0, moved);
+        dragInfo = null;
+        saveState();
+        renderTable();
+      });
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'habit-name';
+      nameSpan.textContent = log.name;
+      nameSpan.style.cursor = 'text';
+      nameSpan.title = 'Tap to rename';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'del-habit';
+      delBtn.textContent = '\u2715';
+      delBtn.title = 'Remove log';
+      delBtn.onclick = ()=>{
+        state.logs = state.logs.filter(l=>l.id!==log.id);
+        Object.keys(state.logNotes).forEach(k=>{ if(k.startsWith(log.id+':')) delete state.logNotes[k]; });
+        saveState();
+        renderTable();
+      };
+      nameSpan.onclick = ()=>{
+        const editInput = document.createElement('input');
+        editInput.type = 'text';
+        editInput.value = log.name;
+        editInput.maxLength = 40;
+        editInput.style.cssText = 'flex:1;font-family:inherit;font-size:12px;font-weight:700;padding:3px 5px;border:1px solid var(--rust);background:var(--paper);color:var(--ink);min-width:0;';
+        function commit(){
+          const val = editInput.value.trim();
+          if(val) log.name = val;
+          saveState();
+          renderTable();
+        }
+        editInput.addEventListener('blur', commit);
+        editInput.addEventListener('keydown', e=>{
+          if(e.key === 'Enter') editInput.blur();
+          if(e.key === 'Escape'){ editInput.value = log.name; editInput.blur(); }
+        });
+        innerWrap.replaceChild(editInput, nameSpan);
+        editInput.focus();
+        editInput.select();
+      };
+      innerWrap.appendChild(nameSpan);
+      innerWrap.appendChild(delBtn);
+      tdName.appendChild(innerWrap);
+      tr.appendChild(tdName);
+
+      for(let d=1; d<=daysInMonth; d++){
+        const td = document.createElement('td');
+        td.className = 'day-cell log-cell';
+        const isToday = viewingCurrentMonth && d === now.getDate();
+        if(isToday) td.classList.add('today');
+        const key = dayCellKey(log.id, d);
+        const val = state.logNotes[key] || '';
+        if(val) td.classList.add('has-value');
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'log-note';
+        input.maxLength = 10;
+        input.value = val;
+        input.addEventListener('input', ()=>{
+          td.classList.toggle('has-value', !!input.value.trim());
+        });
+        input.addEventListener('blur', ()=>{
+          const trimmed = input.value.trim();
+          if(trimmed){ state.logNotes[key] = trimmed; }
+          else { delete state.logNotes[key]; }
+          saveState();
+        });
+        input.addEventListener('keydown', e=>{ if(e.key === 'Enter') input.blur(); });
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+  }
+
+  table.appendChild(tbody);
+}
+
+document.getElementById('addHabitBtn').onclick = addHabit;
+document.getElementById('newHabitInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addHabit(); });
+function addHabit(){
+  const input = document.getElementById('newHabitInput');
+  const val = input.value.trim();
+  if(!val) return;
+  state.habits.push({id: uid(), name: val, session: ''});
+  input.value = '';
+  saveState();
+  renderTable();
+}
+
+document.getElementById('addLogBtn').onclick = addLog;
+document.getElementById('newLogInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addLog(); });
+function addLog(){
+  const input = document.getElementById('newLogInput');
+  const val = input.value.trim();
+  if(!val) return;
+  state.logs.push({id: uid(), name: val});
+  input.value = '';
+  saveState();
+  renderTable();
+}
+
+function renderTodos(){
+  const list = document.getElementById('todoList');
+  const countEl = document.getElementById('todoCount');
+  list.innerHTML = '';
+  countEl.textContent = state.todos.length ? ('(' + state.todos.length + ')') : '';
+  if(state.todos.length === 0){
+    const li = document.createElement('li');
+    li.className = 'todo-empty';
+    li.textContent = 'Nothing pending.';
+    list.appendChild(li);
+    return;
+  }
+  state.todos.forEach(todo=>{
+    const li = document.createElement('li');
+    li.className = 'todo-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    const span = document.createElement('span');
+    span.textContent = todo.text;
+    li.appendChild(cb);
+    li.appendChild(span);
+    cb.onchange = ()=>{
+      li.classList.add('leaving');
+      setTimeout(()=>{
+        state.todos = state.todos.filter(t=>t.id!==todo.id);
+        saveState();
+        renderTodos();
+      }, 340);
+    };
+    list.appendChild(li);
+  });
+}
+
+document.getElementById('addTodoBtn').onclick = addTodo;
+document.getElementById('newTodoInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addTodo(); });
+function addTodo(){
+  const input = document.getElementById('newTodoInput');
+  const val = input.value.trim();
+  if(!val) return;
+  state.todos.push({id: uid(), text: val});
+  input.value = '';
+  saveState();
+  renderTodos();
+}
+
+const todoToggle = document.getElementById('todoToggle');
+const todoBody = document.getElementById('todoBody');
+todoToggle.onclick = ()=>{
+  const open = todoBody.classList.toggle('open');
+  todoToggle.classList.toggle('open', open);
+};
+
+(async function init(){
+  await loadState();
+  renderTable();
+  renderTodos();
+
+  setCloudStatus('\u2601 Connecting\u2026', 'var(--ink-soft)');
+  onSnapshot(stateDocRef, snapshot=>{
+    cloudReady = true;
+    if(suppressNextWrite && snapshot.metadata.hasPendingWrites){
+      return;
+    }
+    suppressNextWrite = false;
+    if(!snapshot.exists()){
+      setCloudStatus('\u2601 Synced', 'var(--olive)');
+      return;
+    }
+    if(snapshot.metadata.hasPendingWrites){
+      return;
+    }
+    const remote = snapshot.data();
+    state = Object.assign({habits:[],ticks:{},todos:[],logs:[],logNotes:{}}, remote);
+    normalizeTicks();
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    renderTable();
+    renderTodos();
+    setCloudStatus('\u2601 Synced', 'var(--olive)');
+  }, err=>{
+    console.error('cloud listen failed', err);
+    setCloudStatus('\u2601 Offline', 'var(--rust)');
+  });
+})();
+</script>
+</body>
+</html>
