@@ -168,7 +168,17 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<div id="loginOverlay" style="position:fixed;inset:0;background:var(--paper);z-index:100;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#FFFEFB;border:1px solid var(--line-strong);padding:28px;width:280px;max-width:90vw;">
+    <h1 style="font-family:Georgia, 'Times New Roman', serif;font-size:20px;margin:0 0 4px;">Habit ledger</h1>
+    <div style="font-size:11px;color:var(--ink-soft);margin-bottom:18px;">Sign in to continue</div>
+    <input id="loginEmail" type="email" placeholder="Email" autocomplete="username" style="width:100%;font-family:inherit;font-size:12px;padding:8px 10px;border:1px solid var(--line-strong);background:var(--paper)!important;color:var(--ink)!important;margin-bottom:8px;box-sizing:border-box;">
+    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" style="width:100%;font-family:inherit;font-size:12px;padding:8px 10px;border:1px solid var(--line-strong);background:var(--paper)!important;color:var(--ink)!important;margin-bottom:12px;box-sizing:border-box;">
+    <button id="loginBtn" style="width:100%;padding:9px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);font-family:inherit;font-size:12px;cursor:pointer;">Sign in</button>
+    <div id="loginError" style="font-size:11px;color:var(--rust);margin-top:10px;min-height:14px;"></div>
+  </div>
+</div>
+<div class="wrap" id="appWrap" style="display:none;">
   <header>
     <div class="header-top">
       <div>
@@ -223,17 +233,12 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { firebaseConfig } from "./firebase-config.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCmquf-sAWb0NhKWdBH3DU2m6LIdl6If7U",
-  authDomain: "habit-tracker-62109.firebaseapp.com",
-  projectId: "habit-tracker-62109",
-  storageBucket: "habit-tracker-62109.firebasestorage.app",
-  messagingSenderId: "55707611483",
-  appId: "1:55707611483:web:b2e03fd2e88a604cb66a7e"
-};
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
+const auth = getAuth(fbApp);
 const stateDocRef = doc(db, "habitLedger", "data");
 let cloudReady = false;
 let suppressNextWrite = false;
@@ -727,7 +732,7 @@ todoToggle.onclick = ()=>{
   todoToggle.classList.toggle('open', open);
 };
 
-(async function init(){
+async function appInit(){
   await loadState();
   renderTable();
   renderTodos();
@@ -757,7 +762,41 @@ todoToggle.onclick = ()=>{
     console.error('cloud listen failed', err);
     setCloudStatus('\u2601 Offline', 'var(--rust)');
   });
-})();
+}
+
+let appStarted = false;
+setPersistence(auth, browserLocalPersistence).catch(()=>{});
+
+onAuthStateChanged(auth, user=>{
+  if(user){
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('appWrap').style.display = '';
+    if(!appStarted){
+      appStarted = true;
+      appInit();
+    }
+  } else {
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('appWrap').style.display = 'none';
+  }
+});
+
+function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){
+    errEl.textContent = 'Enter both email and password.';
+    return;
+  }
+  signInWithEmailAndPassword(auth, email, password).catch(err=>{
+    errEl.textContent = 'Incorrect email or password.';
+  });
+}
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key === 'Enter') doLogin(); });
+document.getElementById('loginEmail').addEventListener('keydown', e=>{ if(e.key === 'Enter') doLogin(); });
 </script>
 </body>
 </html>
