@@ -162,8 +162,13 @@
     transition:opacity 0.35s ease, transform 0.35s ease;
   }
   .todo-item.leaving{opacity:0;transform:translateX(12px);}
+  .todo-item.important{background:var(--rust-light);border-color:var(--rust);}
   .todo-item input[type=checkbox]{width:16px;height:16px;accent-color:var(--olive);cursor:pointer;flex-shrink:0;}
-  .todo-item span{word-break:break-word;}
+  .todo-item span{word-break:break-word;flex:1;}
+  .todo-item.important span{color:var(--rust);font-weight:700;}
+  .todo-flag{background:none;border:none;color:var(--line-strong);cursor:pointer;font-size:12px;line-height:1;padding:2px;flex-shrink:0;font-family:inherit;}
+  .todo-flag:hover{color:var(--rust);}
+  .todo-item.important .todo-flag{color:var(--rust);}
   .todo-empty{padding:20px 16px;font-size:12px;color:var(--ink-soft);text-align:center;grid-column:1/-1;}
 </style>
 </head>
@@ -273,6 +278,11 @@ async function loadState(){
     }
   }catch(e){ /* no existing data */ }
   normalizeTicks();
+  normalizeTodos();
+}
+
+function normalizeTodos(){
+  state.todos.forEach(todo=>{ todo.important = !!todo.important; });
 }
 
 function normalizeTicks(){
@@ -699,15 +709,27 @@ function renderTodos(){
     list.appendChild(li);
     return;
   }
-  state.todos.forEach(todo=>{
+  const ordered = state.todos.slice().sort((a,b)=> (b.important?1:0) - (a.important?1:0));
+  ordered.forEach(todo=>{
     const li = document.createElement('li');
-    li.className = 'todo-item';
+    li.className = 'todo-item' + (todo.important ? ' important' : '');
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     const span = document.createElement('span');
     span.textContent = todo.text;
+    const flagBtn = document.createElement('button');
+    flagBtn.className = 'todo-flag';
+    flagBtn.type = 'button';
+    flagBtn.textContent = '!';
+    flagBtn.title = todo.important ? 'Unmark as important' : 'Mark as important';
+    flagBtn.onclick = ()=>{
+      todo.important = !todo.important;
+      saveState();
+      renderTodos();
+    };
     li.appendChild(cb);
     li.appendChild(span);
+    li.appendChild(flagBtn);
     cb.onchange = ()=>{
       li.classList.add('leaving');
       setTimeout(()=>{
@@ -726,7 +748,7 @@ function addTodo(){
   const input = document.getElementById('newTodoInput');
   const val = input.value.trim();
   if(!val) return;
-  state.todos.push({id: uid(), text: val});
+  state.todos.push({id: uid(), text: val, important: false});
   input.value = '';
   saveState();
   renderTodos();
@@ -800,6 +822,7 @@ async function startUserSession(user){
     const remote = snapshot.data();
     state = Object.assign({habits:[],ticks:{},todos:[],logs:[],logNotes:{}}, remote);
     normalizeTicks();
+    normalizeTodos();
     try{ if(storageKey) localStorage.setItem(storageKey, JSON.stringify(state)); }catch(e){}
     renderTable();
     renderTodos();
