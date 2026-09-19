@@ -194,6 +194,8 @@
         <div class="streak-note" id="todayNote"></div>
         <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;align-items:center;">
           <span id="cloudStatus" style="font-size:9px;color:var(--ink-soft);"></span>
+          <span id="userEmail" style="font-size:9px;color:var(--ink-soft);"></span>
+          <button id="signOutBtn" title="Sign out" style="font-family:inherit;font-size:9px;padding:2px 6px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink-soft);cursor:pointer;">Sign out</button>
         </div>
       </div>
     </div>
@@ -232,14 +234,17 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 const auth = getAuth(fbApp);
-const stateDocRef = doc(db, "habitLedger", "data");
+// Each signed-in user's ledger lives at users/{uid} — set once we know who is signed in.
+let stateDocRef = null;
+let unsubscribeSnapshot = null;
+let currentUid = null;
 let cloudReady = false;
 let suppressNextWrite = false;
 
@@ -248,7 +253,8 @@ function setCloudStatus(text, color){
   if(el){ el.textContent = text; el.style.color = color; }
 }
 
-const STORAGE_KEY = 'habit-ledger-data';
+const STORAGE_KEY_PREFIX = 'habit-ledger-data:';
+let storageKey = null; // set per-uid once signed in, so accounts never share the local cache
 let state = { habits: [], ticks: {}, todos: [], logs: [], logNotes: {} };
 let dragInfo = null;
 
@@ -260,7 +266,7 @@ function todayISO(d){
 
 async function loadState(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storageKey ? localStorage.getItem(storageKey) : null;
     if(raw){
       const parsed = JSON.parse(raw);
       state = Object.assign({habits:[],ticks:{},todos:[],logs:[],logNotes:{}}, parsed);
@@ -285,12 +291,13 @@ function normalizeTicks(){
 
 async function saveState(){
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(storageKey) localStorage.setItem(storageKey, JSON.stringify(state));
   }catch(e){ console.error('save failed', e); }
   pushToCloud();
 }
 
 async function pushToCloud(){
+  if(!stateDocRef) return;
   try{
     suppressNextWrite = true;
     await setDoc(stateDocRef, state);
@@ -732,19 +739,58 @@ todoToggle.onclick = ()=>{
   todoToggle.classList.toggle('open', open);
 };
 
-async function appInit(){
+function resetLocalState(){
+  state = { habits: [], ticks: {}, todos: [], logs: [], logNotes: {} };
+  renderTable();
+  renderTodos();
+}
+
+// One-time migration: this app used to store every signed-in user's data in a single
+// shared document (habitLedger/data). The account below is the sole existing user of
+// that data, so on their first login under the new per-user scheme we copy it into
+// their own users/{uid} doc. It only fires once (per-user doc empty) and only for this
+// account. Safe to delete this block (and the matching firestore.rules entry) once the
+// migration has run.
+const LEGACY_MIGRATION_OWNER_EMAIL = 'pvssaatvik@gmail.com';
+
+async function migrateLegacyDataIfOwner(uid, email){
+  if(!email || email.toLowerCase() !== LEGACY_MIGRATION_OWNER_EMAIL) return;
+  try{
+    const ownSnap = await getDoc(doc(db, 'users', uid));
+    if(ownSnap.exists()) return;
+    const legacySnap = await getDoc(doc(db, 'habitLedger', 'data'));
+    if(!legacySnap.exists()) return;
+    await setDoc(doc(db, 'users', uid), legacySnap.data());
+  }catch(e){
+    console.error('legacy data migration failed', e);
+  }
+}
+
+async function startUserSession(user){
+  const uid = user.uid;
+  if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+  stateDocRef = doc(db, 'users', uid);
+  storageKey = STORAGE_KEY_PREFIX + uid;
+  suppressNextWrite = false;
+  cloudReady = false;
+
+  // Start from this user's own cached copy (if any) so switching accounts never
+  // flashes the previous user's data while the cloud fetch is in flight.
+  state = { habits: [], ticks: {}, todos: [], logs: [], logNotes: {} };
   await loadState();
   renderTable();
   renderTodos();
 
   setCloudStatus('\u2601 Connecting\u2026', 'var(--ink-soft)');
-  onSnapshot(stateDocRef, snapshot=>{
+  await migrateLegacyDataIfOwner(uid, user.email);
+  unsubscribeSnapshot = onSnapshot(stateDocRef, snapshot=>{
     cloudReady = true;
     if(suppressNextWrite && snapshot.metadata.hasPendingWrites){
       return;
     }
     suppressNextWrite = false;
     if(!snapshot.exists()){
+      // Brand-new user: nothing in Firestore yet, keep the empty ledger.
       setCloudStatus('\u2601 Synced', 'var(--olive)');
       return;
     }
@@ -754,7 +800,7 @@ async function appInit(){
     const remote = snapshot.data();
     state = Object.assign({habits:[],ticks:{},todos:[],logs:[],logNotes:{}}, remote);
     normalizeTicks();
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    try{ if(storageKey) localStorage.setItem(storageKey, JSON.stringify(state)); }catch(e){}
     renderTable();
     renderTodos();
     setCloudStatus('\u2601 Synced', 'var(--olive)');
@@ -764,21 +810,35 @@ async function appInit(){
   });
 }
 
-let appStarted = false;
+function endUserSession(){
+  if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+  stateDocRef = null;
+  storageKey = null;
+  currentUid = null;
+  resetLocalState();
+}
+
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
 
 onAuthStateChanged(auth, user=>{
   if(user){
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('appWrap').style.display = '';
-    if(!appStarted){
-      appStarted = true;
-      appInit();
+    document.getElementById('userEmail').textContent = user.email || '';
+    if(user.uid !== currentUid){
+      currentUid = user.uid;
+      startUserSession(user);
     }
   } else {
+    endUserSession();
+    document.getElementById('userEmail').textContent = '';
     document.getElementById('loginOverlay').style.display = 'flex';
     document.getElementById('appWrap').style.display = 'none';
   }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{
+  signOut(auth).catch(err=>console.error('sign out failed', err));
 });
 
 function doLogin(){
