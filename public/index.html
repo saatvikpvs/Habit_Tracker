@@ -84,6 +84,7 @@
   td.day-cell{width:40px;padding:3px 2px;vertical-align:top;}
   td.day-cell.today{background:var(--rust-light);}
   th.today{background:var(--rust-light);color:var(--rust);}
+  th .dow{font-size:8px;font-weight:600;text-transform:uppercase;opacity:.8;}
   .day-tick{width:15px;height:15px;accent-color:var(--olive);cursor:pointer;display:block;margin:0 auto 3px;}
   .day-note{
     width:36px;border:none;background:transparent!important;color:var(--ink-soft)!important;
@@ -377,7 +378,8 @@ function renderTable(){
     th.style.width = '40px';
     const isToday = viewingCurrentMonth && d === now.getDate();
     if(isToday) th.className = 'today';
-    th.textContent = d;
+    const dow = new Date(year, month, d).toLocaleDateString('en-US', {weekday:'short'});
+    th.innerHTML = '<span class="dow">' + dow + '</span><br>' + d;
     trHead.appendChild(th);
   }
   thead.appendChild(trHead);
