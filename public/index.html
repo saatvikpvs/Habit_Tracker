@@ -201,6 +201,7 @@
         <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end;align-items:center;">
           <span id="cloudStatus" style="font-size:9px;color:var(--ink-soft);"></span>
           <span id="userEmail" style="font-size:9px;color:var(--ink-soft);"></span>
+          <button id="exportBtn" title="Download a backup of all your data" style="font-family:inherit;font-size:9px;padding:2px 6px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink-soft);cursor:pointer;">Backup</button>
           <button id="signOutBtn" title="Sign out" style="font-family:inherit;font-size:9px;padding:2px 6px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink-soft);cursor:pointer;">Sign out</button>
         </div>
       </div>
@@ -465,6 +466,7 @@ function renderTable(){
     delBtn.textContent = '\u2715';
     delBtn.title = 'Remove habit';
     delBtn.onclick = ()=>{
+      if(!confirm('Delete "' + habit.name + '" and all its ticks and notes? This cannot be undone.')) return;
       state.habits = state.habits.filter(h=>h.id!==habit.id);
       Object.keys(state.ticks).forEach(k=>{ if(k.startsWith(habit.id+':')) delete state.ticks[k]; });
       saveState();
@@ -860,6 +862,19 @@ onAuthStateChanged(auth, user=>{
     document.getElementById('loginOverlay').style.display = 'flex';
     document.getElementById('appWrap').style.display = 'none';
   }
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const payload = { exportedAt: new Date().toISOString(), data: state };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'habit-ledger-backup-' + todayISO(new Date()) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 });
 
 document.getElementById('signOutBtn').addEventListener('click', ()=>{
