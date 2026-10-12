@@ -465,6 +465,7 @@ function renderTable(){
     delBtn.textContent = '\u2715';
     delBtn.title = 'Remove habit';
     delBtn.onclick = ()=>{
+      if(!confirm('Delete "' + habit.name + '" and all its ticks and notes? This cannot be undone.')) return;
       state.habits = state.habits.filter(h=>h.id!==habit.id);
       Object.keys(state.ticks).forEach(k=>{ if(k.startsWith(habit.id+':')) delete state.ticks[k]; });
       saveState();
