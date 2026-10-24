@@ -63,7 +63,14 @@
   .habit-row-inner{display:flex;align-items:center;gap:5px;width:100%;height:100%;}
   td.habit-col:active{cursor:grabbing;}
   .habit-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;font-weight:700;}
-  tr.drag-over td.habit-col{border-top:2px solid var(--olive);}
+  td.habit-col{touch-action:none;-webkit-user-select:none;user-select:none;}
+  tr.row-shifting{transition:transform .16s ease;}
+  tr.dragging-row{position:relative;z-index:20;transition:none;}
+  tr.dragging-row td{background:#FFFEFB;}
+  tr.dragging-row td.habit-col{cursor:grabbing;}
+  tr.dragging-row{box-shadow:0 6px 16px rgba(0,0,0,.22);}
+  tr.row-settling{transition:transform .15s ease;}
+  body.is-dragging-row, body.is-dragging-row *{cursor:grabbing!important;user-select:none;}
   td.habit-col{border-left:4px solid transparent;}
   td.habit-col.session-morning{border-left:4px solid var(--morning);}
   td.habit-col.session-night{border-left:4px solid var(--night);}
@@ -110,6 +117,7 @@
   .note-wrap.flip.long:hover input{left:auto;right:-31px;}
   .note-wrap.first input:focus,
   .note-wrap.first.long:hover input{left:0;}
+  td.day-cell{transition:background-color .15s ease;}
   td.day-cell.checked{background:var(--olive-light);}
   td.day-cell.checked .day-note{color:var(--olive)!important;}
   td.day-cell.today.checked{background:var(--olive-light);}
@@ -281,7 +289,6 @@ function setCloudStatus(text, color){
 const STORAGE_KEY_PREFIX = 'habit-ledger-data:';
 let storageKey = null; // set per-uid once signed in, so accounts never share the local cache
 let state = { habits: [], ticks: {}, todos: [], logs: [], logNotes: {} };
-let dragInfo = null;
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function todayISO(d){
@@ -378,6 +385,103 @@ function wireNoteWrap(wrap, input){
   wrap.addEventListener('click', ()=> input.focus());
 }
 
+// Smooth pointer-based row reordering (mouse, pen and touch). The grabbed row follows the
+// pointer, the rows it passes slide out of the way, and the new order is saved on release.
+function enableRowDrag(tr, handle, rowSelector, list, id){
+  const THRESHOLD = 5;
+  handle.addEventListener('pointerdown', e=>{
+    if(e.button !== undefined && e.button !== 0) return;
+    if(e.target.closest('button, input, select, .session-icon')) return;
+    const tbody = tr.parentNode;
+    const startY = e.clientY, pointerId = e.pointerId;
+    let dragging = false, rows, rects, from, to, minDy, maxDy, dy = 0;
+
+    function begin(){
+      dragging = true;
+      rows = Array.from(tbody.querySelectorAll(rowSelector));
+      rects = rows.map(r=>r.getBoundingClientRect());
+      from = to = rows.indexOf(tr);
+      minDy = rects[0].top - rects[from].top;
+      maxDy = rects[rows.length-1].bottom - rects[from].bottom;
+      rows.forEach(r=>{ if(r !== tr) r.classList.add('row-shifting'); });
+      tr.classList.add('dragging-row');
+      document.body.classList.add('is-dragging-row');
+      try{ handle.setPointerCapture(pointerId); }catch(_){}
+    }
+    function shiftOthers(){
+      const h = rects[from].height;
+      // A row swaps places once the grabbed row's leading edge passes its midpoint.
+      const top = rects[from].top + dy, bottom = top + h;
+      to = from;
+      rows.forEach((r,i)=>{
+        const c = rects[i].top + rects[i].height/2;
+        if(i > from && bottom > c) to = Math.max(to, i);
+        if(i < from && top < c) to = Math.min(to, i);
+      });
+      rows.forEach((r,i)=>{
+        if(r === tr) return;
+        let shift = 0;
+        if(i > from && i <= to) shift = -h;
+        if(i < from && i >= to) shift = h;
+        r.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+      });
+    }
+    function onMove(ev){
+      if(ev.pointerId !== pointerId) return;
+      const raw = ev.clientY - startY;
+      if(!dragging){
+        if(Math.abs(raw) < THRESHOLD) return;
+        begin();
+      }
+      dy = Math.max(minDy, Math.min(maxDy, raw));
+      tr.style.transform = 'translateY(' + dy + 'px)';
+      shiftOthers();
+    }
+    function cleanup(){
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onCancel);
+      document.body.classList.remove('is-dragging-row');
+    }
+    function onCancel(ev){
+      if(ev.pointerId !== pointerId) return;
+      cleanup();
+      if(dragging){ renderTable(); }
+    }
+    function onUp(ev){
+      if(ev.pointerId !== pointerId) return;
+      cleanup();
+      if(!dragging) return;
+      // Don't let the click that ends a drag trigger a rename.
+      const eatClick = stop=>{ stop.stopPropagation(); stop.preventDefault(); };
+      handle.addEventListener('click', eatClick, true);
+      setTimeout(()=>handle.removeEventListener('click', eatClick, true), 50);
+      // Settle the grabbed row into its slot, then rebuild with the saved order.
+      let settle = 0;
+      if(to > from) settle = rects[to].bottom - rects[from].bottom;
+      else if(to < from) settle = rects[to].top - rects[from].top;
+      tr.classList.add('row-settling');
+      tr.style.transform = 'translateY(' + settle + 'px)';
+      setTimeout(()=>{
+        if(to !== from){
+          const fromIdx = list.findIndex(x=>x.id===id);
+          const ids = rows.map(r=>r.dataset.habitId || r.dataset.logId);
+          const target = list.findIndex(x=>x.id===ids[to]);
+          if(fromIdx !== -1 && target !== -1){
+            const [moved] = list.splice(fromIdx, 1);
+            list.splice(target, 0, moved);
+            saveState();
+          }
+        }
+        renderTable();
+      }, 160);
+    }
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onCancel);
+  });
+}
+
 function dayCellKey(habitId, day){
   const m = String(month+1).padStart(2,'0');
   const d = String(day).padStart(2,'0');
@@ -448,41 +552,8 @@ function renderTable(){
       saveState();
     };
 
-    tdName.draggable = true;
     tdName.title = 'Drag to reorder';
-    tdName.addEventListener('dragstart', e=>{
-      dragInfo = { type: 'habit', id: habit.id };
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', habit.id);
-      tr.classList.add('dragging-row');
-    });
-    tdName.addEventListener('dragend', ()=>{
-      tr.classList.remove('dragging-row');
-      document.querySelectorAll('tr.drag-over').forEach(el=>el.classList.remove('drag-over'));
-    });
-
-    tr.addEventListener('dragover', e=>{
-      if(!dragInfo || dragInfo.type !== 'habit') return;
-      e.preventDefault();
-      tr.classList.add('drag-over');
-    });
-    tr.addEventListener('dragleave', ()=>{ tr.classList.remove('drag-over'); });
-    tr.addEventListener('drop', e=>{
-      if(!dragInfo || dragInfo.type !== 'habit') return;
-      e.preventDefault();
-      tr.classList.remove('drag-over');
-      const fromId = dragInfo.id;
-      const toId = habit.id;
-      if(fromId === toId) return;
-      const fromIdx = state.habits.findIndex(h=>h.id===fromId);
-      const toIdx = state.habits.findIndex(h=>h.id===toId);
-      if(fromIdx === -1 || toIdx === -1) return;
-      const [moved] = state.habits.splice(fromIdx, 1);
-      state.habits.splice(toIdx, 0, moved);
-      dragInfo = null;
-      saveState();
-      renderTable();
-    });
+    enableRowDrag(tr, tdName, 'tr[data-habit-id]', state.habits, habit.id);
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'habit-name';
@@ -596,41 +667,8 @@ function renderTable(){
       const innerWrap = document.createElement('div');
       innerWrap.className = 'habit-row-inner';
 
-      tdName.draggable = true;
       tdName.title = 'Drag to reorder';
-      tdName.addEventListener('dragstart', e=>{
-        dragInfo = { type: 'log', id: log.id };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', log.id);
-        tr.classList.add('dragging-row');
-      });
-      tdName.addEventListener('dragend', ()=>{
-        tr.classList.remove('dragging-row');
-        document.querySelectorAll('tr.drag-over').forEach(el=>el.classList.remove('drag-over'));
-      });
-
-      tr.addEventListener('dragover', e=>{
-        if(!dragInfo || dragInfo.type !== 'log') return;
-        e.preventDefault();
-        tr.classList.add('drag-over');
-      });
-      tr.addEventListener('dragleave', ()=>{ tr.classList.remove('drag-over'); });
-      tr.addEventListener('drop', e=>{
-        if(!dragInfo || dragInfo.type !== 'log') return;
-        e.preventDefault();
-        tr.classList.remove('drag-over');
-        const fromId = dragInfo.id;
-        const toId = log.id;
-        if(fromId === toId) return;
-        const fromIdx = state.logs.findIndex(l=>l.id===fromId);
-        const toIdx = state.logs.findIndex(l=>l.id===toId);
-        if(fromIdx === -1 || toIdx === -1) return;
-        const [moved] = state.logs.splice(fromIdx, 1);
-        state.logs.splice(toIdx, 0, moved);
-        dragInfo = null;
-        saveState();
-        renderTable();
-      });
+      enableRowDrag(tr, tdName, 'tr[data-log-id]', state.logs, log.id);
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'habit-name';
