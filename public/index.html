@@ -81,17 +81,35 @@
   }
   .del-habit{background:none;border:none;color:var(--line-strong);cursor:pointer;font-size:13px;line-height:1;padding:2px;flex-shrink:0;align-self:center;margin-left:auto;}
   .del-habit:hover{color:var(--rust);}
-  td.day-cell{width:88px;padding:3px 2px;vertical-align:top;}
+  td.day-cell{width:40px;padding:3px 2px;vertical-align:top;}
   td.day-cell.today{background:var(--rust-light);}
   th.today{background:var(--rust-light);color:var(--rust);}
   th .dow{font-size:8px;font-weight:600;text-transform:uppercase;opacity:.8;}
   .day-tick{width:15px;height:15px;accent-color:var(--olive);cursor:pointer;display:block;margin:0 auto 3px;}
   .day-note{
-    width:84px;border:none;background:transparent!important;color:var(--ink-soft)!important;
+    width:36px;border:none;background:transparent!important;color:var(--ink-soft)!important;
     text-align:center;font-family:inherit;font-size:9px;padding:0;display:block;
     caret-color:var(--ink);
   }
   .day-note:focus{outline:1px solid var(--olive);outline-offset:-1px;}
+  /* Notes show ~6 characters in the cell; while editing, the box pops out to fit 15. */
+  .note-wrap{position:relative;width:36px;margin:0 auto;}
+  .note-wrap.day{height:12px;}
+  .note-wrap.log{height:26px;}
+  .note-wrap input{position:absolute;top:0;left:0;box-sizing:border-box;text-overflow:ellipsis;}
+  .note-wrap{cursor:text;}
+  .note-wrap input{pointer-events:none;cursor:text;}
+  .note-wrap input:focus{pointer-events:auto;}
+  .note-wrap input:focus,
+  .note-wrap.long:hover input{
+    width:98px;left:-31px;z-index:10;text-overflow:clip;
+    background:var(--paper)!important;outline:1px solid var(--olive);outline-offset:0;
+    box-shadow:0 2px 6px rgba(0,0,0,.18);
+  }
+  .note-wrap.flip input:focus,
+  .note-wrap.flip.long:hover input{left:auto;right:-31px;}
+  .note-wrap.first input:focus,
+  .note-wrap.first.long:hover input{left:0;}
   td.day-cell.checked{background:var(--olive-light);}
   td.day-cell.checked .day-note{color:var(--olive)!important;}
   td.day-cell.today.checked{background:var(--olive-light);}
@@ -110,7 +128,7 @@
     border-top:2px solid var(--ink);border-bottom:1px solid var(--line-strong);
   }
   .log-note{
-    width:84px;height:26px;border:none;background:transparent!important;color:var(--ink)!important;
+    width:36px;height:26px;border:none;background:transparent!important;color:var(--ink)!important;
     text-align:center;font-family:inherit;font-size:9px;padding:0;
     caret-color:var(--ink);
   }
@@ -352,6 +370,14 @@ document.getElementById('nextMonthBtn').onclick = ()=>{
   renderTable();
 };
 
+// Note boxes show ~6 characters; hovering a long note or editing it expands the box to show all 15.
+function wireNoteWrap(wrap, input){
+  const sync = ()=> wrap.classList.toggle('long', input.value.length > 6);
+  sync();
+  input.addEventListener('input', sync);
+  wrap.addEventListener('click', ()=> input.focus());
+}
+
 function dayCellKey(habitId, day){
   const m = String(month+1).padStart(2,'0');
   const d = String(day).padStart(2,'0');
@@ -376,7 +402,7 @@ function renderTable(){
   trHead.appendChild(thHabit);
   for(let d=1; d<=daysInMonth; d++){
     const th = document.createElement('th');
-    th.style.width = '88px';
+    th.style.width = '40px';
     const isToday = viewingCurrentMonth && d === now.getDate();
     if(isToday) th.className = 'today';
     const dow = new Date(year, month, d).toLocaleDateString('en-US', {weekday:'short'});
@@ -539,7 +565,11 @@ function renderTable(){
       note.addEventListener('keydown', e=>{ if(e.key === 'Enter') note.blur(); });
 
       td.appendChild(cb);
-      td.appendChild(note);
+      const noteWrap = document.createElement('div');
+      noteWrap.className = 'note-wrap day' + (d <= 1 ? ' first' : '') + (d >= daysInMonth - 1 ? ' flip' : '');
+      noteWrap.appendChild(note);
+      wireNoteWrap(noteWrap, note);
+      td.appendChild(noteWrap);
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
@@ -667,7 +697,11 @@ function renderTable(){
           saveState();
         });
         input.addEventListener('keydown', e=>{ if(e.key === 'Enter') input.blur(); });
-        td.appendChild(input);
+        const noteWrap = document.createElement('div');
+        noteWrap.className = 'note-wrap log' + (d <= 1 ? ' first' : '') + (d >= daysInMonth - 1 ? ' flip' : '');
+        noteWrap.appendChild(input);
+        wireNoteWrap(noteWrap, input);
+        td.appendChild(noteWrap);
         tr.appendChild(td);
       }
       tbody.appendChild(tr);
