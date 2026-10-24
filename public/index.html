@@ -81,13 +81,13 @@
   }
   .del-habit{background:none;border:none;color:var(--line-strong);cursor:pointer;font-size:13px;line-height:1;padding:2px;flex-shrink:0;align-self:center;margin-left:auto;}
   .del-habit:hover{color:var(--rust);}
-  td.day-cell{width:40px;padding:3px 2px;vertical-align:top;}
+  td.day-cell{width:88px;padding:3px 2px;vertical-align:top;}
   td.day-cell.today{background:var(--rust-light);}
   th.today{background:var(--rust-light);color:var(--rust);}
   th .dow{font-size:8px;font-weight:600;text-transform:uppercase;opacity:.8;}
   .day-tick{width:15px;height:15px;accent-color:var(--olive);cursor:pointer;display:block;margin:0 auto 3px;}
   .day-note{
-    width:36px;border:none;background:transparent!important;color:var(--ink-soft)!important;
+    width:84px;border:none;background:transparent!important;color:var(--ink-soft)!important;
     text-align:center;font-family:inherit;font-size:9px;padding:0;display:block;
     caret-color:var(--ink);
   }
@@ -110,7 +110,7 @@
     border-top:2px solid var(--ink);border-bottom:1px solid var(--line-strong);
   }
   .log-note{
-    width:36px;height:26px;border:none;background:transparent!important;color:var(--ink)!important;
+    width:84px;height:26px;border:none;background:transparent!important;color:var(--ink)!important;
     text-align:center;font-family:inherit;font-size:9px;padding:0;
     caret-color:var(--ink);
   }
@@ -376,7 +376,7 @@ function renderTable(){
   trHead.appendChild(thHabit);
   for(let d=1; d<=daysInMonth; d++){
     const th = document.createElement('th');
-    th.style.width = '40px';
+    th.style.width = '88px';
     const isToday = viewingCurrentMonth && d === now.getDate();
     if(isToday) th.className = 'today';
     const dow = new Date(year, month, d).toLocaleDateString('en-US', {weekday:'short'});
@@ -519,7 +519,7 @@ function renderTable(){
       const note = document.createElement('input');
       note.type = 'text';
       note.className = 'day-note';
-      note.maxLength = 6;
+      note.maxLength = 15;
       note.value = entry.note || '';
 
       function persist(){
@@ -655,7 +655,7 @@ function renderTable(){
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'log-note';
-        input.maxLength = 10;
+        input.maxLength = 15;
         input.value = val;
         input.addEventListener('input', ()=>{
           td.classList.toggle('has-value', !!input.value.trim());
